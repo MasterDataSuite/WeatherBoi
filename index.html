@@ -536,7 +536,9 @@ function render(p, d) {
   const isThess = /thessalon/i.test(p.name);
 
   $("place").textContent = p.name;
-  $("sub").textContent = [p.mine ? "Your location" : "", p.country, d.elevation != null ? round(d.elevation) + " m above sea level" : ""].filter(Boolean).join(" · ");
+  $("sub").textContent = p.mine
+    ? ["Your location " + (p.accuracy || ""), p.country].filter(Boolean).join(" · ")
+    : [p.country, d.elevation != null ? round(d.elevation) + " m above sea level" : ""].filter(Boolean).join(" · ");
   document.title = p.name + " Weather";
 
   // Sky
@@ -690,7 +692,17 @@ async function placeName(lat, lon) {
     clearTimeout(timer);
     if (!res.ok) return null;
     const r = await res.json();
-    return { name: r.city || r.locality || "", country: r.countryName || "" };
+    // Most specific name first: neighbourhood/suburb (locality), then city, then the
+    // smallest administrative area listed, then the region.
+    const admin = ((r.localityInfo && r.localityInfo.administrative) || [])
+      .filter(a => a.name && a.adminLevel >= 6)
+      .sort((a, b) => b.adminLevel - a.adminLevel);
+    const name = r.locality || r.city || (admin[0] && admin[0].name) || r.principalSubdivision || "";
+    const parts = [];
+    if (r.city && r.city !== name) parts.push(r.city);
+    if (r.principalSubdivision && r.principalSubdivision !== name) parts.push(r.principalSubdivision);
+    if (r.countryName) parts.push(r.countryName);
+    return { name, country: parts.join(", ") };
   } catch (e) { return null; }
 }
 
@@ -705,7 +717,11 @@ $("locate").addEventListener("click", () => {
   navigator.geolocation.getCurrentPosition(async pos => {
     const lat = +pos.coords.latitude.toFixed(4), lon = +pos.coords.longitude.toFixed(4);
     const named = await placeName(lat, lon);
-    const place = { name: (named && named.name) || "Your location", country: (named && named.country) || "", lat, lon, mine: true };
+    const acc = pos.coords.accuracy;
+    const place = {
+      name: (named && named.name) || "Your location", country: (named && named.country) || "", lat, lon, mine: true,
+      accuracy: acc >= 1000 ? "±" + Math.round(acc / 1000) + " km" : "±" + Math.round(acc) + " m"
+    };
     save("city", JSON.stringify(place));
     setLocating(false);
     show(place);
@@ -714,7 +730,7 @@ $("locate").addEventListener("click", () => {
     if (err.code === 1) showError("Location access is blocked. Allow it in your browser's site settings, or search for a city.");
     else if (err.code === 3) showError("Finding your location took too long. Try again, or search for a city.");
     else showError("Your location isn't available right now. Search for a city instead.");
-  }, { enableHighAccuracy: false, timeout: 10000, maximumAge: 10 * 60 * 1000 });
+  }, { enableHighAccuracy: true, timeout: 15000, maximumAge: 5 * 60 * 1000 });
 });
 
 // Start: ?city=Athens in the URL wins, then the last city searched, then Thessaloniki
