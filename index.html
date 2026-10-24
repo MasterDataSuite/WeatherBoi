@@ -101,7 +101,13 @@ header { display: flex; flex-wrap: wrap; gap: 12px; align-items: center; justify
 .place { min-width: 0; }
 .place h1 { font: 700 1.6rem/1.1 var(--display); margin: 0; text-wrap: balance; }
 .place p { margin: 2px 0 0; color: var(--soft-on); font-size: .85rem; }
-form { display: flex; gap: 6px; }
+form { display: flex; flex-wrap: wrap; gap: 6px; }
+.locate {
+  display: inline-flex; align-items: center; gap: 5px;
+  background: rgba(255,255,255,.14); color: var(--ink-on); border: 1px solid rgba(255,255,255,.35);
+}
+.locate svg { width: 15px; height: 15px; fill: none; stroke: currentColor; stroke-width: 2; }
+.locate[disabled] { opacity: .7; cursor: progress; }
 .sr { position: absolute; left: -9999px; }
 input {
   width: 9.5rem; padding: 7px 10px; border-radius: 8px; font: inherit; font-size: .9rem;
@@ -236,6 +242,10 @@ footer a { color: var(--sea); }
           <label for="city" class="sr">City</label>
           <input id="city" name="city" placeholder="Other city" autocomplete="off">
           <button type="submit">Go</button>
+          <button type="button" class="locate" id="locate" title="Use my location">
+            <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 2.5a7 7 0 0 0-7 7c0 5.2 7 12 7 12s7-6.8 7-12a7 7 0 0 0-7-7z"/><circle cx="12" cy="9.5" r="2.6"/></svg>
+            <span id="locate-text">My location</span>
+          </button>
         </form>
       </header>
 
@@ -526,7 +536,7 @@ function render(p, d) {
   const isThess = /thessalon/i.test(p.name);
 
   $("place").textContent = p.name;
-  $("sub").textContent = [p.country, d.elevation != null ? round(d.elevation) + " m above sea level" : ""].filter(Boolean).join(" · ");
+  $("sub").textContent = [p.mine ? "Your location" : "", p.country, d.elevation != null ? round(d.elevation) + " m above sea level" : ""].filter(Boolean).join(" · ");
   document.title = p.name + " Weather";
 
   // Sky
@@ -666,6 +676,45 @@ $("search").addEventListener("submit", async e => {
   } catch (err) {
     showError(err.message + ".");
   }
+});
+
+/* ---------- Use my location ---------- */
+// Turns coordinates into a town name. Open-Meteo has no reverse lookup, so this uses
+// BigDataCloud's free, keyless endpoint. If it fails, the page just says "Your location".
+async function placeName(lat, lon) {
+  try {
+    const ctrl = new AbortController();
+    const timer = setTimeout(() => ctrl.abort(), 4000);
+    const url = `https://api.bigdatacloud.net/data/reverse-geocode-client?latitude=${lat}&longitude=${lon}&localityLanguage=en`;
+    const res = await fetch(url, { signal: ctrl.signal });
+    clearTimeout(timer);
+    if (!res.ok) return null;
+    const r = await res.json();
+    return { name: r.city || r.locality || "", country: r.countryName || "" };
+  } catch (e) { return null; }
+}
+
+function setLocating(on) {
+  $("locate").disabled = on;
+  $("locate-text").textContent = on ? "Locating…" : "My location";
+}
+
+$("locate").addEventListener("click", () => {
+  if (!("geolocation" in navigator)) { showError("This browser can't share your location. Search for a city instead."); return; }
+  setLocating(true);
+  navigator.geolocation.getCurrentPosition(async pos => {
+    const lat = +pos.coords.latitude.toFixed(4), lon = +pos.coords.longitude.toFixed(4);
+    const named = await placeName(lat, lon);
+    const place = { name: (named && named.name) || "Your location", country: (named && named.country) || "", lat, lon, mine: true };
+    save("city", JSON.stringify(place));
+    setLocating(false);
+    show(place);
+  }, err => {
+    setLocating(false);
+    if (err.code === 1) showError("Location access is blocked. Allow it in your browser's site settings, or search for a city.");
+    else if (err.code === 3) showError("Finding your location took too long. Try again, or search for a city.");
+    else showError("Your location isn't available right now. Search for a city instead.");
+  }, { enableHighAccuracy: false, timeout: 10000, maximumAge: 10 * 60 * 1000 });
 });
 
 // Start: ?city=Athens in the URL wins, then the last city searched, then Thessaloniki
