@@ -1,0 +1,314 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>Thessaloniki Weather</title>
+<meta name="description" content="Current weather and forecast for Thessaloniki from Open-Meteo">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,500;12..96,700&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap">
+<style>
+/* Layout: one narrow column, like a harbour-office board: now -> next hours -> week */
+:root {
+  --bg: #eef2f3;
+  --surface: #ffffff;
+  --ink: #142128;
+  --muted: #5b6b73;
+  --line: #d5dee1;
+  --sea: #2c6e8a;
+  --sun: #c9821f;
+  --rain: #3b7fc0;
+  --display: "Bricolage Grotesque", "Segoe UI", system-ui, sans-serif;
+  --body: "IBM Plex Sans", "Segoe UI", system-ui, sans-serif;
+  --mono: "IBM Plex Mono", ui-monospace, Consolas, monospace;
+  color-scheme: light;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #0e171c; --surface: #16232a; --ink: #e4ecef; --muted: #8fa1a9;
+    --line: #26363e; --sea: #6db3d1; --sun: #e3a64a; --rain: #77aee6;
+    color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #0e171c; --surface: #16232a; --ink: #e4ecef; --muted: #8fa1a9;
+  --line: #26363e; --sea: #6db3d1; --sun: #e3a64a; --rain: #77aee6;
+  color-scheme: dark;
+}
+* { box-sizing: border-box; }
+html { padding-top: env(safe-area-inset-top, 0px); padding-bottom: env(safe-area-inset-bottom, 0px); }
+body {
+  margin: 0;
+  background: var(--bg);
+  color: var(--ink);
+  font: 15px/1.5 var(--body);
+  padding-left: max(16px, env(safe-area-inset-left, 0px));
+  padding-right: max(16px, env(safe-area-inset-right, 0px));
+}
+main { max-width: 560px; margin: 0 auto; padding-block: 24px 40px; display: grid; gap: 20px; }
+
+header { display: flex; flex-wrap: wrap; gap: 12px; align-items: center; justify-content: space-between; }
+.place { min-width: 0; }
+.place h1 { font: 700 1.6rem/1.1 var(--display); margin: 0; text-wrap: balance; }
+.place p { margin: 2px 0 0; color: var(--muted); font-size: .85rem; }
+form { display: flex; gap: 6px; }
+input {
+  width: 9.5rem; padding: 7px 10px; border: 1px solid var(--line); border-radius: 8px;
+  background: var(--surface); color: var(--ink); font: inherit; font-size: .9rem;
+}
+button {
+  padding: 7px 12px; border: 0; border-radius: 8px; background: var(--sea); color: var(--bg);
+  font: 600 .9rem var(--body); cursor: pointer;
+}
+input:focus-visible, button:focus-visible { outline: 2px solid var(--sea); outline-offset: 2px; }
+
+.now {
+  background: var(--surface); border: 1px solid var(--line); border-radius: 14px;
+  padding: 20px; display: grid; gap: 16px;
+}
+.now-top { display: flex; flex-wrap: wrap; align-items: flex-end; gap: 8px 20px; }
+.temp { font: 700 4.2rem/0.9 var(--display); letter-spacing: -0.02em; font-variant-numeric: tabular-nums; }
+.temp small { font-size: 1.6rem; color: var(--muted); font-weight: 500; }
+.cond { display: grid; gap: 2px; padding-bottom: 4px; }
+.cond strong { font: 600 1.1rem var(--body); }
+.cond span { color: var(--muted); font-size: .9rem; }
+.facts { display: grid; grid-template-columns: repeat(auto-fit, minmax(110px, 1fr)); gap: 12px; margin: 0; }
+.facts div { display: grid; gap: 1px; }
+.facts dt { font-size: .72rem; text-transform: uppercase; letter-spacing: .06em; color: var(--muted); }
+.facts dd { margin: 0; font: 500 1rem var(--mono); font-variant-numeric: tabular-nums; }
+.tag {
+  display: inline-block; margin-left: 6px; padding: 0 6px; border-radius: 4px;
+  background: var(--sea); color: var(--bg); font: 600 .7rem var(--body); letter-spacing: .04em; vertical-align: 2px;
+}
+
+h2 { font: 600 .75rem var(--body); text-transform: uppercase; letter-spacing: .08em; color: var(--muted); margin: 0 0 8px; }
+
+.hours-wrap { overflow-x: auto; }
+.hours { display: grid; grid-auto-flow: column; grid-auto-columns: 58px; gap: 6px; padding-bottom: 4px; }
+.hour {
+  display: grid; justify-items: center; gap: 4px; padding: 10px 4px;
+  background: var(--surface); border: 1px solid var(--line); border-radius: 10px;
+  font-variant-numeric: tabular-nums;
+}
+.hour .t { font: 500 .78rem var(--mono); color: var(--muted); }
+.hour .v { font: 600 1rem var(--mono); }
+.hour .p { font: 400 .72rem var(--mono); color: var(--rain); min-height: 1em; }
+
+.days { list-style: none; margin: 0; padding: 0; border-top: 1px solid var(--line); }
+.day {
+  display: grid; grid-template-columns: 3.4rem 1fr auto auto; gap: 12px; align-items: center;
+  padding: 10px 0; border-bottom: 1px solid var(--line); font-variant-numeric: tabular-nums;
+}
+.day .d { font-weight: 600; }
+.day .c { color: var(--muted); font-size: .9rem; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.day .r { font: 400 .8rem var(--mono); color: var(--rain); text-align: right; min-width: 2.6rem; }
+.day .hl { font: 500 .95rem var(--mono); text-align: right; min-width: 5.5rem; }
+.day .hl span { color: var(--muted); }
+
+.sun { display: flex; gap: 20px; color: var(--muted); font: 400 .85rem var(--mono); }
+.sun b { color: var(--sun); font-weight: 500; }
+
+footer { color: var(--muted); font-size: .8rem; display: flex; flex-wrap: wrap; justify-content: space-between; gap: 8px; }
+footer a { color: var(--sea); }
+.error { background: var(--surface); border: 1px solid var(--line); border-radius: 10px; padding: 14px; }
+.loading { opacity: .55; }
+@media (prefers-reduced-motion: no-preference) { main { transition: opacity .2s; } }
+</style>
+</head>
+<body>
+<main id="app" class="loading">
+  <header>
+    <div class="place">
+      <h1 id="place">Thessaloniki</h1>
+      <p id="sub">Loading forecast…</p>
+    </div>
+    <form id="search">
+      <label for="city" style="position:absolute;left:-9999px">City</label>
+      <input id="city" name="city" placeholder="Other city" autocomplete="off">
+      <button type="submit">Go</button>
+    </form>
+  </header>
+
+  <section class="now" aria-label="Current conditions">
+    <div class="now-top">
+      <div class="temp" id="temp">--<small>°C</small></div>
+      <div class="cond"><strong id="cond">&nbsp;</strong><span id="feels">&nbsp;</span></div>
+    </div>
+    <dl class="facts">
+      <div><dt>Today</dt><dd id="hilo">–</dd></div>
+      <div><dt>Rain chance</dt><dd id="rain">–</dd></div>
+      <div><dt>Wind</dt><dd id="wind">–</dd></div>
+      <div><dt>Humidity</dt><dd id="hum">–</dd></div>
+    </dl>
+  </section>
+
+  <section aria-label="Next 12 hours">
+    <h2>Next 12 hours</h2>
+    <div class="hours-wrap"><div class="hours" id="hours"></div></div>
+  </section>
+
+  <section aria-label="7-day forecast">
+    <h2>7 days</h2>
+    <ul class="days" id="days"></ul>
+  </section>
+
+  <div class="sun" id="sun"></div>
+
+  <footer>
+    <span id="updated"></span>
+    <a href="https://open-meteo.com/" target="_blank" rel="noopener">Weather data by Open-Meteo.com</a>
+  </footer>
+</main>
+
+<script>
+const DEFAULT = { name: "Thessaloniki", country: "Greece", lat: 40.6401, lon: 22.9444 };
+
+const CODES = {
+  0: "Clear sky", 1: "Mainly clear", 2: "Partly cloudy", 3: "Overcast",
+  45: "Fog", 48: "Freezing fog",
+  51: "Light drizzle", 53: "Drizzle", 55: "Heavy drizzle", 56: "Freezing drizzle", 57: "Freezing drizzle",
+  61: "Light rain", 63: "Rain", 65: "Heavy rain", 66: "Freezing rain", 67: "Freezing rain",
+  71: "Light snow", 73: "Snow", 75: "Heavy snow", 77: "Snow grains",
+  80: "Light showers", 81: "Showers", 82: "Violent showers", 85: "Snow showers", 86: "Heavy snow showers",
+  95: "Thunderstorm", 96: "Thunderstorm, hail", 99: "Severe thunderstorm, hail"
+};
+const COMPASS = ["N","NNE","NE","ENE","E","ESE","SE","SSE","S","SSW","SW","WSW","W","WNW","NW","NNW"];
+
+const $ = id => document.getElementById(id);
+const round = n => Math.round(n);
+const compass = deg => COMPASS[Math.round(deg / 22.5) % 16];
+const hhmm = iso => iso.slice(11, 16);
+
+function store(key, val) { try { val === undefined ? null : localStorage.setItem(key, val); } catch (e) {} }
+function load(key) { try { return localStorage.getItem(key); } catch (e) { return null; } }
+
+async function geocode(name) {
+  const url = "https://geocoding-api.open-meteo.com/v1/search?count=1&language=en&format=json&name=" + encodeURIComponent(name);
+  const res = await fetch(url);
+  if (!res.ok) throw new Error("City search failed (" + res.status + ")");
+  const data = await res.json();
+  const r = data.results && data.results[0];
+  if (!r) return null;
+  return { name: r.name, country: r.country || "", lat: r.latitude, lon: r.longitude };
+}
+
+async function forecast(p) {
+  const params = new URLSearchParams({
+    latitude: p.lat, longitude: p.lon, timezone: "auto", forecast_days: 7,
+    current: "temperature_2m,apparent_temperature,relative_humidity_2m,wind_speed_10m,wind_direction_10m,weather_code",
+    hourly: "temperature_2m,precipitation_probability",
+    daily: "weather_code,temperature_2m_max,temperature_2m_min,precipitation_probability_max,sunrise,sunset"
+  });
+  const res = await fetch("https://api.open-meteo.com/v1/forecast?" + params);
+  if (!res.ok) throw new Error("Forecast unavailable (" + res.status + ")");
+  return res.json();
+}
+
+function render(p, d) {
+  const c = d.current, day = d.daily, h = d.hourly;
+  const isThess = /thessalon/i.test(p.name);
+
+  $("place").textContent = p.name;
+  $("sub").textContent = [p.country, d.elevation != null ? round(d.elevation) + " m above sea level" : ""].filter(Boolean).join(" · ");
+  document.title = p.name + " Weather";
+
+  $("temp").innerHTML = round(c.temperature_2m) + "<small>°C</small>";
+  $("cond").textContent = CODES[c.weather_code] || "Unknown";
+  $("feels").textContent = "Feels like " + round(c.apparent_temperature) + "°";
+  $("hilo").textContent = round(day.temperature_2m_max[0]) + "° / " + round(day.temperature_2m_min[0]) + "°";
+  $("rain").textContent = (day.precipitation_probability_max[0] ?? 0) + "%";
+  $("hum").textContent = c.relative_humidity_2m + "%";
+
+  // The Vardaris is Thessaloniki's cold north-westerly wind down the Axios valley.
+  const dir = c.wind_direction_10m;
+  const vardaris = isThess && c.wind_speed_10m >= 25 && (dir >= 300 || dir <= 20);
+  $("wind").innerHTML = round(c.wind_speed_10m) + " km/h " + compass(dir) + (vardaris ? '<span class="tag">VARDARIS</span>' : "");
+
+  // Next 12 hours, starting at the current hour
+  const nowHour = c.time.slice(0, 13) + ":00";
+  let i = h.time.findIndex(t => t >= nowHour);
+  if (i < 0) i = 0;
+  const hours = $("hours");
+  hours.replaceChildren();
+  for (let k = i; k < Math.min(i + 12, h.time.length); k++) {
+    const el = document.createElement("div");
+    el.className = "hour";
+    const pr = h.precipitation_probability[k];
+    el.innerHTML = '<span class="t"></span><span class="v"></span><span class="p"></span>';
+    el.children[0].textContent = k === i ? "Now" : hhmm(h.time[k]);
+    el.children[1].textContent = round(h.temperature_2m[k]) + "°";
+    el.children[2].textContent = pr >= 10 ? pr + "%" : "";
+    hours.appendChild(el);
+  }
+
+  // 7-day list
+  const days = $("days");
+  days.replaceChildren();
+  day.time.forEach((t, k) => {
+    const li = document.createElement("li");
+    li.className = "day";
+    const name = k === 0 ? "Today" : new Date(t + "T12:00").toLocaleDateString("en-GB", { weekday: "short" });
+    const pr = day.precipitation_probability_max[k] ?? 0;
+    li.innerHTML = '<span class="d"></span><span class="c"></span><span class="r"></span><span class="hl"></span>';
+    li.children[0].textContent = name;
+    li.children[1].textContent = CODES[day.weather_code[k]] || "";
+    li.children[2].textContent = pr >= 10 ? pr + "%" : "";
+    li.children[3].innerHTML = round(day.temperature_2m_max[k]) + "° <span>" + round(day.temperature_2m_min[k]) + "°</span>";
+    days.appendChild(li);
+  });
+
+  $("sun").innerHTML = "<span>Sunrise <b>" + hhmm(day.sunrise[0]) + "</b></span><span>Sunset <b>" + hhmm(day.sunset[0]) + "</b></span>";
+  $("updated").textContent = "Updated " + hhmm(c.time) + " local time";
+}
+
+function showError(msg) {
+  $("sub").textContent = msg;
+}
+
+let current = DEFAULT;
+
+async function show(place) {
+  $("app").classList.add("loading");
+  try {
+    const data = await forecast(place);
+    current = place;
+    render(place, data);
+  } catch (e) {
+    showError(e.message + ". Check your connection and try again.");
+  } finally {
+    $("app").classList.remove("loading");
+  }
+}
+
+$("search").addEventListener("submit", async e => {
+  e.preventDefault();
+  const q = $("city").value.trim();
+  if (!q) { store("city", ""); return show(DEFAULT); }
+  try {
+    const p = await geocode(q);
+    if (!p) { showError('No city called "' + q + '" found. Try another spelling.'); return; }
+    store("city", JSON.stringify(p));
+    $("city").value = "";
+    show(p);
+  } catch (err) {
+    showError(err.message + ".");
+  }
+});
+
+// Start: ?city=Athens in the URL wins, then the last city searched, then Thessaloniki
+(async () => {
+  const q = new URLSearchParams(location.search).get("city");
+  if (q) {
+    try { const p = await geocode(q); if (p) return show(p); } catch (e) {}
+  }
+  const saved = load("city");
+  if (saved) { try { return show(JSON.parse(saved)); } catch (e) {} }
+  show(DEFAULT);
+})();
+
+// Refresh every 15 minutes while the page is open
+setInterval(() => show(current), 15 * 60 * 1000);
+</script>
+</body>
+</html>
